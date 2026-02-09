@@ -149,8 +149,19 @@ namespace AgenticAI
         public static ToolResponse EndProcess(Kernel kernel, KernelArguments arguments, string ProcessId, string ProcessName)
         {
             Console.WriteLine($"Attempting to end process with ID: {ProcessId} Name:{ProcessName}");
+#if !DEBUG
+            try
+            { 
+                System.Diagnostics.Process.GetProcessById(int.Parse(ProcessId)).Kill();                
+                return new ToolResponse { Result = "success", Information = $"Process with ID: {ProcessId} Name:{ProcessName} has been terminated." };
+            }catch(Exception ex)
+            {
+                return new ToolResponse { Result = "error", ErrorMessage = $"Failed to terminate process with ID: {ProcessId} Name:{ProcessName}. Exception: {ex.Message}" };
+            }
+#else
             return new ToolResponse { Result = "success", Information = $"Process with ID: {ProcessId} Name:{ProcessName} has been terminated." };
+#endif
         }
     }
-    #endregion
+#endregion
 }
