@@ -9,9 +9,7 @@ namespace AgenticAI
     internal class Program
     {
         static async Task Main(string[] args)
-        {
-            string? str = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-
+        {            
             string delete_file_path = System.IO.Path.GetTempFileName();
 
             var builder = Kernel.CreateBuilder()
