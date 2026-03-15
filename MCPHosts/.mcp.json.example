@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "barebones-host": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "I:\\Path\\To\\Your\\MCPHosts\\MCPHosts.BareBones"
+      ],
+      "env": {}
+    }
+  }
+}
