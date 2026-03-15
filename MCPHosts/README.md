@@ -4,9 +4,11 @@ A collection of Model Context Protocol (MCP) host implementations demonstrating 
 
 ## Overview
 
-This solution contains multiple implementations of MCP hosts, each demonstrating a different approach to hosting MCP servers:
+This solution contains multiple implementations of MCP hosts and clients, each demonstrating a different approach to building MCP servers in .NET:
 
 - **BareBones** - A minimal stdio-based MCP host implementation using raw JSON-RPC over standard input/output
+- **Server** - A production-ready MCP host using the `ModelContextProtocol.Server` library with attribute-based tool registration
+- **Clients** - A complete MCP client demo showcasing how to connect to MCP servers and integrate them with LLMs (Ollama) using Microsoft.Extensions.AI
 
 ## What is MCP (Model Context Protocol)?
 
@@ -91,8 +93,14 @@ MCP uses JSON-RPC 2.0 for communication. Each message is a JSON object with the 
 MCPHosts/
 ├── MCPHosts.sln                    # Solution file
 ├── MCPHosts.BareBones/             # Bare-bones stdio implementation
-│   ├── Program.cs                  # Main MCP host implementation
+│   ├── Program.cs                  # Raw JSON-RPC implementation
 │   └── MCPHosts.BareBones.csproj   # Project file
+├── MCPHosts.Server/                # Production-ready MCP server
+│   ├── Program.cs                  # Server library implementation
+│   └── MCPHosts.Server.csproj      # Project file with ModelContextProtocol.Server
+├── MCPHosts.Clients/               # MCP client demo
+│   ├── Program.cs                  # Client with Ollama integration
+│   └── MCPHosts.Clients.csproj     # Project file with OllamaSharp & Microsoft.Extensions.AI
 ├── Videos/                         # Demo videos
 │   └── MCPHost-Demo.mp4           # Local demo walkthrough
 ├── log.txt                         # JSON-RPC communication log (generated at runtime)
@@ -317,15 +325,18 @@ cp .claude/settings.json.example .claude/settings.local.json
 # Navigate to the solution directory
 cd I:\Yog\Training\QuestpondAI\MyCode\MCPHosts
 
-# Build the solution
+# Build the entire solution
 dotnet build
 
-# Or build just the BareBones project
-cd MCPHosts.BareBones
-dotnet build
+# Or build individual projects
+dotnet build MCPHosts.BareBones
+dotnet build MCPHosts.Server
+dotnet build MCPHosts.Clients
 ```
 
-### Running Standalone (for manual testing)
+### Running Projects
+
+#### MCPHosts.BareBones (Manual Testing)
 
 ```bash
 # Run the executable directly
@@ -339,6 +350,22 @@ dotnet run --project MCPHosts.BareBones
 To test manually, you can send JSON-RPC messages via stdin:
 ```bash
 echo '{"method":"ping","jsonrpc":"2.0","id":1}' | .\MCPHosts.BareBones.exe
+```
+
+#### MCPHosts.Server (Production)
+
+```bash
+dotnet run --project MCPHosts.Server
+```
+
+#### MCPHosts.Clients (Demo with Ollama)
+
+```bash
+# Ensure Ollama is running first
+ollama serve
+
+# In another terminal, run the client
+dotnet run --project MCPHosts.Clients
 ```
 
 ## Demo Video
@@ -659,6 +686,289 @@ case "prompts/get":
     break;
 ```
 
+---
+
+## MCPHosts.Server - Production-Ready Implementation
+
+The Server project demonstrates the recommended approach for building MCP hosts in .NET using the official `ModelContextProtocol.Server` library. This approach provides:
+
+- **Declarative tool registration** using attributes
+- **Clean, maintainable code** without manual JSON-RPC handling
+- **Built-in protocol compliance** with MCP specification
+- **Integration with .NET hosting abstractions** (IHost, DI, logging)
+- **Automatic schema generation** from method signatures
+
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    ModelContextProtocol.Server                       │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  LLM Client (Claude Code)         MCPHosts.Server                    │
+│  ┌──────────────────┐            ┌────────────────────────┐         │
+│  │                  │            │                        │         │
+│  │  1. Start Process│───────────►│  Host.CreateApplicationBuilder│         │
+│  │                  │            │                        │         │
+│  └──────────────────┘            │  .AddMcpServer()       │         │
+│          │                        │  .WithStdioTransport()│         │
+│          │ 2. initialize          │  .WithTools<T>()      │         │
+│          ├──────────────────────────────────────────────►│         │
+│          │◄──────────────────────────────────────────────┤         │
+│          │                        │                        │         │
+│          │ 3. tools/list          │  [McpServerToolType]  │         │
+│          ├──────────────────────────────────────────────►│  MCPTools│         │
+│          │◄──────────────────────────────────────────────┤  Class   │         │
+│          │                        │                        │         │
+│          │ 4. tools/call          │  [McpServerTool]      │         │
+│          ├──────────────────────────────────────────────►│  Methods │         │
+│          │◄──────────────────────────────────────────────┤         │
+│          │                        │                        │         │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Details
+
+#### Host Setup (Program.cs:13-29)
+
+The server uses .NET's `HostApplicationBuilder` for a clean, configurable setup:
+
+```csharp
+HostApplicationBuilder? builder = Host.CreateApplicationBuilder(args);
+
+// Configure logging to stderr (doesn't interfere with stdio)
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole(consoleLogOptions =>
+{
+    consoleLogOptions.LogToStandardErrorThreshold = LogLevel.Trace;
+});
+
+// Register MCP server with stdio transport and tools
+builder.Services
+    .AddMcpServer()
+    .WithStdioServerTransport()
+    .WithTools<MCPTools>();
+
+await builder.Build().RunAsync();
+```
+
+#### Tool Registration with Attributes (Program.cs:33-49)
+
+Tools are defined as simple C# methods with attributes:
+
+```csharp
+[McpServerToolType]  // Marks this class as containing MCP tools
+public class MCPTools
+{
+    [McpServerTool]  // Marks this method as an MCP tool
+    [Description("Gets the current server time.")]
+    public string getServerTime()
+    {
+        return DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+    }
+
+    [McpServerTool]
+    [Description("Echoes the provided message back to the caller.")]
+    public string Echo(string message)
+    {
+        return $"Echo: {message}";
+    }
+}
+```
+
+### Comparison: BareBones vs Server
+
+| Aspect | BareBones | Server (Recommended) |
+|--------|-----------|---------------------|
+| **Lines of Code** | ~200 LOC | ~50 LOC |
+| **JSON Handling** | Manual parsing with JsonNode | Automatic via library |
+| **Protocol Compliance** | Manual implementation | Built-in compliance |
+| **Extensibility** | Requires manual updates | Just add methods with attributes |
+| **Error Handling** | Manual try-catch | Built into framework |
+| **Dependency Injection** | Not supported | Full DI support |
+| **Logging** | Manual file logging | Structured logging with ILogger |
+| **Tool Schema** | Manual JSON schema | Auto-generated from signatures |
+
+### Available Tools
+
+**1. getServerTime**
+- **Description**: Gets the current server time in UTC (ISO 8601 format)
+- **Parameters**: None
+- **Returns**: String representation of DateTime.UtcNow
+
+**2. Echo**
+- **Description**: Echoes the provided message back to the caller
+- **Parameters**:
+  - `message` (string, required): The message to echo
+- **Returns**: The message prefixed with "Echo: "
+
+### Running MCPHosts.Server with Claude Code
+
+Update your `.mcp.json` configuration:
+
+```json
+{
+  "mcpServers": {
+    "server-host": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "I:\\Yog\\Training\\QuestpondAI\\MyCode\\MCPHosts\\MCPHosts.Server"
+      ],
+      "env": {}
+    }
+  }
+}
+```
+
+Update `.claude/settings.local.json` permissions:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet:*)",
+      "mcp__server-host__getServerTime",
+      "mcp__server-host__echo"
+    ]
+  }
+}
+```
+
+---
+
+## MCPHosts.Clients - MCP Client with LLM Integration
+
+The Clients project demonstrates how to build an MCP client that connects to an MCP server and integrates it with an LLM (Ollama) for automated tool calling. This showcases the **client-side** of the MCP protocol, complementing the server implementations.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    MCP Client with LLM Integration                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   User          ChatClientBuilder         McpClient          MCP Server │
+│    │                    │                     │                  │      │
+│    │  "What time is it?"│                     │                  │      │
+│    ├───────────────────►│                     │                  │      │
+│    │                    │  ListToolsAsync()   │                  │      │
+│    │                    ├────────────────────►│                  │      │
+│    │                    │  [getServerTime]    │                  │      │
+│    │                    │◄────────────────────┤                  │      │
+│    │                    │                     │                  │      │
+│    │                    │  GetResponseAsync() │                  │      │
+│    │                    │  with Tools         │                  │      │
+│    │                    ├───────────────────────────────────────►│      │
+│    │                    │                     │  execute tool    │      │
+│    │                    │◄───────────────────────────────────────┤      │
+│    │                    │                     │                  │      │
+│    │◄───────────────────┤  "The time is..."    │                  │      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Details
+
+#### Client Setup (Program.cs:17-26)
+
+Create a stdio transport to connect to the MCP server:
+
+```csharp
+var transport = new StdioClientTransport(
+    new()
+    {
+        Command = "dotnet",
+        Arguments = ["run", "--project", "I:\\Yog\\Training\\QuestpondAI\\MyCode\\MCPHosts\\MCPHosts.Server"],
+        Name = "MCPHosts.Server",
+        WorkingDirectory = "I:\\Yog\\Training\\QuestpondAI\\MyCode\\MCPHosts\\MCPHosts.Server"
+    });
+
+McpClient mcpClient = await McpClient.CreateAsync(transport);
+```
+
+#### LLM Integration with Ollama (Program.cs:28-34)
+
+Connect to Ollama and enable automatic function invocation:
+
+```csharp
+var ollama = new OllamaApiClient("http://localhost:11434", "gpt-oss:20b-cloud");
+
+var chatClient = new ChatClientBuilder(ollama)
+    .UseFunctionInvocation()  // Auto-calls MCP tools
+    .Build();
+```
+
+#### Tool Discovery and Usage (Program.cs:36-47)
+
+```csharp
+// Discover available tools
+IList<McpClientTool> tools = await mcpClient.ListToolsAsync();
+foreach (McpClientTool tool in tools)
+{
+    Console.WriteLine($"{tool}");
+}
+
+// Send request with automatic tool invocation
+var response = await chatClient.GetResponseAsync(
+    "What is the server time?",
+    new ChatOptions { Tools = [.. tools] }
+);
+```
+
+### How It Works
+
+1. **Client Initialization**: The stdio transport starts the MCP server process (MCPHosts.Server)
+2. **Tool Discovery**: `ListToolsAsync()` queries the server for available tools
+3. **LLM Request**: User sends a natural language query to the LLM
+4. **Automatic Function Calling**: The `ChatClientBuilder` with `UseFunctionInvocation()` automatically:
+   - Analyzes the user's query
+   - Selects appropriate MCP tools
+   - Calls the tools via the MCP client
+   - Incorporates tool results into the final response
+5. **Response**: The LLM returns a natural language response incorporating tool results
+
+### Dependencies
+
+- **ModelContextProtocol** (v1.1.0) - Official MCP client library
+- **OllamaSharp** (v5.4.23) - Ollama client for .NET
+- **Microsoft.Extensions.AI** (v10.4.0) - AI abstractions for function calling
+
+### Prerequisites for Running
+
+1. **Ollama Installation**: Install [Ollama](https://ollama.com/)
+2. **Pull a Model**: `ollama pull gpt-oss:20b-cloud` (or any model)
+3. **Start Ollama**: Ensure Ollama is running on `http://localhost:11434`
+4. **Update Paths**: Edit `Program.cs:21-23` to match your local paths
+
+### Example Run
+
+```bash
+cd MCPHosts.Clients
+dotnet run
+```
+
+**Output:**
+```
+Available tools:
+McpClientTool { Name = getServerTime, Description = Gets the current server time. }
+McpClientTool { Name = echo, Description = Echoes the provided message back to the caller. }
+
+Response: The current server time is 2025-03-15T14:30:45.1234567Z
+```
+
+### Key Takeaways
+
+- **MCP is bidirectional**: You can be both a server (providing tools) and a client (consuming tools)
+- **LLM Integration**: Microsoft.Extensions.AI provides seamless integration between LLMs and MCP tools
+- **Automatic Tool Calling**: The `UseFunctionInvocation()` middleware handles tool selection and execution automatically
+- **Vendor Agnostic**: This pattern works with any LLM that supports function calling (OpenAI, Azure OpenAI, etc.)
+
+---
+
 ## Future Implementations
 
 This proof of concept will expand to include:
@@ -667,13 +977,18 @@ This proof of concept will expand to include:
 - **HTTP Implementation** - REST-based MCP hosting
 - **WebSocket Implementation** - Real-time bidirectional communication
 - **Advanced Features** - Resources, prompts, and full MCP specification
+- **Multi-Server Client** - Demonstrating clients that connect to multiple MCP servers
 
 ## References
 
 - [MCP Official Documentation](https://modelcontextprotocol.io/)
+- [ModelContextProtocol .NET Library](https://www.nuget.org/packages/ModelContextProtocol/)
 - [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
 - [Claude Code Documentation](https://code.anthropic.com/)
 - [.NET 9.0 Documentation](https://learn.microsoft.com/en-us/dotnet/core/)
+- [Ollama](https://ollama.com/) - Local LLM runtime
+- [OllamaSharp](https://github.com/WaitForOllama/OllamaSharp) - .NET client for Ollama
+- [Microsoft.Extensions.AI](https://learn.microsoft.com/en-us/dotnet/ai/) - AI abstractions for .NET
 
 ## License
 
@@ -685,6 +1000,7 @@ This is a personal learning project. Feel free to fork and experiment with your 
 
 ---
 
-**Last Updated**: March 2025
+**Last Updated**: March 2026
 **.NET Version**: 9.0
 **MCP Protocol Version**: 2025-06-18
+**ModelContextProtocol Package**: 1.1.0

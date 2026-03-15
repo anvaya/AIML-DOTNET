@@ -109,6 +109,7 @@ namespace MCPHosts.BareBones
                 await writer.FlushAsync(); // Ensure that the response is sent immediately without buffering
             }
         }
+        
 
         /// <summary>
         /// Creates a JSON-RPC response listing available tools with their names and descriptions.
