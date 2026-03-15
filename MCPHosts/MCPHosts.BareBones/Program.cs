@@ -5,12 +5,12 @@ using System.Text.Json.Nodes;
 namespace MCPHosts.BareBones
 {
     /*
-     * LLM Client
+     * MCP Host
        (Claude / Cursor / OpenAI agent)
         │
         │ JSON-RPC
         ▼
-        MCP Host (your .NET app)
+        MCP Server 
         │
         ├── Tools
         ├── Resources

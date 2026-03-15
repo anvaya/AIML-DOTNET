@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MCPHosts.BareBones", "MCPHo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MCPHosts.Server", "MCPHosts.Server\MCPHosts.Server.csproj", "{1CA93E40-5D52-44F0-BC82-6DA1AAA8F3E4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MCPHosts.Clients", "MCPHosts.Clients\MCPHosts.Clients.csproj", "{32CCE09B-D064-4321-8153-6833B7D74527}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MCPHosts.Host", "MCPHosts.Hosts\MCPHosts.Host.csproj", "{32CCE09B-D064-4321-8153-6833B7D74527}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

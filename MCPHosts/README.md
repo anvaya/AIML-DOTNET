@@ -1,14 +1,14 @@
-# MCP Hosts - Proof of Concept
+# MCP Servers & Hosts - Proof of Concept
 
-A collection of Model Context Protocol (MCP) host implementations demonstrating different approaches to building MCP servers in .NET. This project showcases how to create MCP hosts that can be integrated with LLM clients like Claude Code, Cursor, and other MCP-compliant tools.
+A collection of Model Context Protocol (MCP) implementations demonstrating different approaches to building MCP servers and clients in .NET. This project showcases how to create MCP servers that can be integrated with LLM clients like Claude Code, Cursor, and other MCP-compliant tools, as well as how to build MCP clients that consume these servers.
 
 ## Overview
 
-This solution contains multiple implementations of MCP hosts and clients, each demonstrating a different approach to building MCP servers in .NET:
+This solution contains multiple implementations of MCP servers and clients, each demonstrating a different approach:
 
-- **BareBones** - A minimal stdio-based MCP host implementation using raw JSON-RPC over standard input/output
-- **Server** - A production-ready MCP host using the `ModelContextProtocol.Server` library with attribute-based tool registration
-- **Clients** - A complete MCP client demo showcasing how to connect to MCP servers and integrate them with LLMs (Ollama) using Microsoft.Extensions.AI
+- **BareBones** - A minimal stdio-based MCP **Server** implementation using raw JSON-RPC over standard input/output
+- **Server** - A production-ready MCP **Server** using the `ModelContextProtocol.Server` library with attribute-based tool registration
+- **Host** - A complete MCP **Host/Client** demo showcasing how to connect to MCP servers and integrate them with LLMs (Ollama) using Microsoft.Extensions.AI
 
 ## What is MCP (Model Context Protocol)?
 
@@ -22,7 +22,7 @@ The Model Context Protocol (MCP) is an open standard that enables LLM clients to
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │   ┌──────────┐     JSON-RPC      ┌──────────────────────┐          │
-│   │   LLM    │◄─────────────────►│    MCP Host          │          │
+│   │   LLM    │◄─────────────────►│    MCP Server        │          │
 │   │  Client  │                   │  (Your Application)  │          │
 │   │          │                   │                      │          │
 │   │ Claude   │                   │  ┌────────────────┐  │          │
@@ -45,11 +45,11 @@ The Model Context Protocol (MCP) is an open standard that enables LLM clients to
 
 ### How MCP Works
 
-1. **Connection**: The LLM client starts your MCP host process (typically via stdio)
+1. **Connection**: The LLM client starts your MCP server process (typically via stdio)
 2. **Initialization**: The client sends an `initialize` request to establish protocol version and capabilities
 3. **Discovery**: The client queries available tools using `tools/list`
 4. **Execution**: The client calls tools using `tools/call` with parameters
-5. **Response**: The host returns results in a structured JSON format
+5. **Response**: The server returns results in a structured JSON format
 
 ### JSON-RPC Protocol
 
@@ -92,15 +92,15 @@ MCP uses JSON-RPC 2.0 for communication. Each message is a JSON object with the 
 ```
 MCPHosts/
 ├── MCPHosts.sln                    # Solution file
-├── MCPHosts.BareBones/             # Bare-bones stdio implementation
+├── MCPHosts.BareBones/             # Bare-bones stdio implementation (MCP Server)
 │   ├── Program.cs                  # Raw JSON-RPC implementation
 │   └── MCPHosts.BareBones.csproj   # Project file
 ├── MCPHosts.Server/                # Production-ready MCP server
 │   ├── Program.cs                  # Server library implementation
 │   └── MCPHosts.Server.csproj      # Project file with ModelContextProtocol.Server
-├── MCPHosts.Clients/               # MCP client demo
-│   ├── Program.cs                  # Client with Ollama integration
-│   └── MCPHosts.Clients.csproj     # Project file with OllamaSharp & Microsoft.Extensions.AI
+├── MCPHosts.Hosts/                 # MCP Host/Client demo
+│   ├── Program.cs                  # Host with Ollama integration
+│   └── MCPHosts.Host.csproj        # Project file with OllamaSharp & Microsoft.Extensions.AI
 ├── Videos/                         # Demo videos
 │   └── MCPHost-Demo.mp4           # Local demo walkthrough
 ├── log.txt                         # JSON-RPC communication log (generated at runtime)
@@ -109,9 +109,9 @@ MCPHosts/
 
 **Demo Video**: [Watch the testing walkthrough with Claude Code](https://somup.com/cOeo2lVcXhM) (3:21 min)
 
-## MCPHosts.BareBones - Stdio Implementation
+## MCPHosts.BareBones - Stdio MCP Server
 
-The BareBones project demonstrates the simplest possible MCP host using standard input/output (stdio) for communication. This approach is ideal for:
+The BareBones project demonstrates the simplest possible MCP Server using standard input/output (stdio) for communication. This approach is ideal for:
 
 - Learning the MCP protocol fundamentals
 - Quick prototyping
@@ -125,7 +125,7 @@ The BareBones project demonstrates the simplest possible MCP host using standard
 │                    Stdio Communication Flow                         │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
-│  LLM Client (Claude Code)         MCP Host (MCPHosts.BareBones)     │
+│  LLM Client (Claude Code)         MCP Server (MCPHosts.BareBones)   │
 │  ┌──────────────────┐            ┌────────────────────────┐         │
 │  │                  │            │                        │         │
 │  │  1. Start Process│───────────►│  Process Started       │         │
@@ -165,7 +165,7 @@ The BareBones project demonstrates the simplest possible MCP host using standard
 
 #### Main Communication Loop (Program.cs:26-111)
 
-The host runs in an infinite loop, processing JSON-RPC requests from standard input:
+The server runs in an infinite loop, processing JSON-RPC requests from standard input:
 
 ```csharp
 while (true)
@@ -331,7 +331,7 @@ dotnet build
 # Or build individual projects
 dotnet build MCPHosts.BareBones
 dotnet build MCPHosts.Server
-dotnet build MCPHosts.Clients
+dotnet build MCPHosts.Hosts
 ```
 
 ### Running Projects
@@ -358,29 +358,29 @@ echo '{"method":"ping","jsonrpc":"2.0","id":1}' | .\MCPHosts.BareBones.exe
 dotnet run --project MCPHosts.Server
 ```
 
-#### MCPHosts.Clients (Demo with Ollama)
+#### MCPHosts.Hosts (Demo with Ollama)
 
 ```bash
 # Ensure Ollama is running first
 ollama serve
 
-# In another terminal, run the client
-dotnet run --project MCPHosts.Clients
+# In another terminal, run the host/client
+dotnet run --project MCPHosts.Hosts
 ```
 
 ## Demo Video
 
-[Watch the complete walkthrough of testing this MCP host with Claude Code](https://somup.com/cOeo2lVcXhM) (3:21 minutes)
+[Watch the complete walkthrough of testing this MCP server with Claude Code](https://somup.com/cOeo2lVcXhM) (3:21 minutes)
 
 The demo covers:
-- Starting the MCP host with Claude Code
+- Starting the MCP server with Claude Code
 - Verifying the connection and available tools
 - Using the `get_time` and `echo` tools
 - Inspecting the JSON-RPC communication log
 
 ## Testing with Claude Code
 
-Claude Code is an MCP-compatible client that can connect to your MCP host. Here's how to set it up:
+Claude Code is an MCP-compatible client that can connect to your MCP server. Here's how to set it up:
 
 ### Step 1: Create MCP Configuration
 
@@ -444,7 +444,7 @@ The template includes all necessary permissions. If you need to customize, edit 
 
 **Permission Format:**
 - `mcp__<server-name>__<tool-name>`: Grant access to specific tools
-- Bash permissions: Allow starting the MCP host process
+- Bash permissions: Allow starting the MCP server process
 
 ### Step 3: Start Claude Code
 
@@ -488,7 +488,7 @@ Claude: The echo result is: Hello from MCP!
 
 ### Testing Other MCP Clients
 
-The same MCP host can work with other MCP-compatible clients:
+The same MCP server can work with other MCP-compatible clients:
 
 #### Cursor IDE
 
@@ -564,7 +564,7 @@ Current implementation uses: `2025-06-18`
 
 ### Required Methods
 
-An MCP host must implement at minimum:
+An MCP server must implement at minimum:
 
 1. **initialize** - Handshake and capability exchange
 2. **tools/list** - Return available tools
@@ -607,7 +607,7 @@ Tools are defined with the following schema:
 }
 ```
 
-## Extending the BareBones Host
+## Extending the BareBones Server
 
 ### Adding a New Tool
 
@@ -688,9 +688,9 @@ case "prompts/get":
 
 ---
 
-## MCPHosts.Server - Production-Ready Implementation
+## MCPHosts.Server - Production-Ready MCP Server
 
-The Server project demonstrates the recommended approach for building MCP hosts in .NET using the official `ModelContextProtocol.Server` library. This approach provides:
+The Server project demonstrates the recommended approach for building MCP servers in .NET using the official `ModelContextProtocol.Server` library. This approach provides:
 
 - **Declarative tool registration** using attributes
 - **Clean, maintainable code** without manual JSON-RPC handling
@@ -840,9 +840,9 @@ Update `.claude/settings.local.json` permissions:
 
 ---
 
-## MCPHosts.Clients - MCP Client with LLM Integration
+## MCPHosts.Hosts - MCP Client/Host with LLM Integration
 
-The Clients project demonstrates how to build an MCP client that connects to an MCP server and integrates it with an LLM (Ollama) for automated tool calling. This showcases the **client-side** of the MCP protocol, complementing the server implementations.
+The Hosts project demonstrates how to build an MCP client that connects to an MCP server and integrates it with an LLM (Ollama) for automated tool calling. This showcases the **client-side** of the MCP protocol, complementing the server implementations.
 
 ### Architecture
 
@@ -947,7 +947,7 @@ var response = await chatClient.GetResponseAsync(
 ### Example Run
 
 ```bash
-cd MCPHosts.Clients
+cd MCPHosts.Hosts
 dotnet run
 ```
 
